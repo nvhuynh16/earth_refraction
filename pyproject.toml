@@ -1,0 +1,35 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "nanobind>=2.0"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "refraction"
+version = "0.1.0"
+description = "Atmospheric and ocean refractive index computation with 3D ray tracing on WGS-84"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Nen Huynh"}]
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "scipy>=1.10"]
+keywords = [
+    "refraction", "ray-tracing", "eikonal", "atmosphere", "ocean",
+    "WGS84", "radio", "sonar", "acoustics", "NRLMSIS",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[tool.scikit-build]
+wheel.packages = ["python/src/refraction"]
+cmake.build-type = "Release"
