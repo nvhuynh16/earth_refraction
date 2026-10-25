@@ -1,6 +1,8 @@
 """Tests for surface anchoring."""
 
 import math
+
+import numpy as np
 import pytest
 from refraction.surface_anchor import (
     SurfaceObservation, compute_anchor, density_scale_at,
@@ -14,56 +16,135 @@ def test_density_scale_at_surface(msis, standard_input, standard_obs):
     assert s == pytest.approx(params.density_scale, abs=1e-10)
 
 
-def test_density_scale_hydrostatic(msis, standard_input, standard_obs):
-    params = compute_anchor(standard_obs, msis, standard_input)
-
-    # Scale should change monotonically from S₀ toward asymptote
-    s_0 = density_scale_at(0.0, params)
-    s_20 = density_scale_at(20.0, params)
-    s_40 = density_scale_at(40.0, params)
-    s_100 = density_scale_at(100.0, params)
-
-    # Monotonic: if hydro_C > 0, scale increases; if < 0, decreases
-    if params.hydro_C > 0:
-        assert s_20 > s_0
-        assert s_40 > s_20
-    elif params.hydro_C < 0:
-        assert s_20 < s_0
-        assert s_40 < s_20
-
-    # Convergence: 40 km and 100 km should be close (erf saturates)
-    asymptote = params.density_scale * math.exp(params.hydro_C)
-    assert s_100 == pytest.approx(asymptote, rel=1e-6)
-
-
-def test_density_scale_constant_when_no_temp_offset(msis, standard_input):
-    """When dT=0, hydro_C=0, so S should be constant (= S₀) at all altitudes."""
-    # Get model temperature at surface so we can match it exactly
-    from refraction.atmosphere.nrlmsis21 import NRLMSIS21, MSISInput
+def _model_surface_T_C(msis, standard_input, alt=0.0):
+    from refraction.atmosphere.nrlmsis21 import MSISInput
     inp = MSISInput(
         day=standard_input.day, utsec=standard_input.utsec,
-        alt=0.0, lat=standard_input.lat, lon=standard_input.lon,
+        alt=alt, lat=standard_input.lat, lon=standard_input.lon,
+        f107a=standard_input.f107a, f107=standard_input.f107,
+        ap=list(standard_input.ap),
+    )
+    return msis.msiscalc(inp).tn - 273.15
+
+
+def _anchored_pressure(msis, standard_input, params, h):
+    """Dry pressure of the anchored NRLMSIS species at altitude h (Pa)."""
+    from refraction.atmosphere.nrlmsis21 import MSISInput
+    from refraction.constants import kB
+    inp = MSISInput(
+        day=standard_input.day, utsec=standard_input.utsec,
+        alt=h, lat=standard_input.lat, lon=standard_input.lon,
         f107a=standard_input.f107a, f107=standard_input.f107,
         ap=list(standard_input.ap),
     )
     out = msis.msiscalc(inp)
-    T_model_C = out.tn - 273.15
+    n_model = sum(out.dn[i] for i in range(2, 11) if 0 < out.dn[i] < 1e30)
+    T_a = out.tn + temperature_offset_at(h, params)
+    return n_model * density_scale_at(h, params) * kB * T_a, n_model * kB * out.tn
 
+
+@pytest.mark.parametrize("T_C, P_kPa, RH, h", [
+    (20.0, 101.325, 0.5, 0.0),
+    (35.0, 100.0, 0.9, 0.0),
+    (-5.0, 102.0, 0.0, 0.0),
+    (10.0, 85.0, 0.3, 1.5),
+])
+def test_anchored_surface_reproduces_observation(msis, standard_input, T_C, P_kPa, RH, h):
+    """Anchored dry air + water vapor must give the observed T and total P."""
+    from refraction.constants import kB
+    obs = SurfaceObservation(altitude_km=h, temperature_C=T_C,
+                             pressure_kPa=P_kPa, relative_humidity=RH)
+    params = compute_anchor(obs, msis, standard_input)
+    P_dry, _ = _anchored_pressure(msis, standard_input, params, h)
+    T_K = T_C + 273.15
+    e = anchored_H2O_density(h, params) * kB * T_K
+    assert P_dry + e == pytest.approx(P_kPa * 1000.0, rel=1e-10)
+    T_model_C = _model_surface_T_C(msis, standard_input, h)
+    assert T_model_C + 273.15 + temperature_offset_at(h, params) == pytest.approx(T_K, rel=1e-12)
+
+
+def test_density_scale_includes_temperature_ratio(msis, standard_input):
+    """Warmer air at the same pressure must be less dense."""
+    cold = compute_anchor(SurfaceObservation(0.0, 0.0, 101.325, 0.0), msis, standard_input)
+    hot = compute_anchor(SurfaceObservation(0.0, 30.0, 101.325, 0.0), msis, standard_input)
+    assert hot.density_scale / cold.density_scale == pytest.approx(273.15 / 303.15, rel=1e-12)
+
+
+def test_density_scale_excludes_vapor_pressure(msis, standard_input):
+    """At equal T and total P, humid air has less dry air (Dalton)."""
+    from refraction.constants import kB
+    dry = compute_anchor(SurfaceObservation(0.0, 25.0, 101.325, 0.0), msis, standard_input)
+    wet = compute_anchor(SurfaceObservation(0.0, 25.0, 101.325, 1.0), msis, standard_input)
+    e = wet.n_H2O_surface * kB * 298.15
+    assert wet.pressure_scale / dry.pressure_scale == pytest.approx(
+        (101325.0 - e) / 101325.0, rel=1e-12)
+
+
+@pytest.mark.parametrize("T_C, H_T", [(35.0, 2.0), (35.0, 15.0), (-10.0, 5.0)])
+def test_density_scale_hydrostatic(msis, standard_input, T_C, H_T):
+    """ln(P_anch/P_model) must match an independent hydrostatic integral."""
+    from refraction.atmosphere.nrlmsis21 import (
+        MSISInput, MBARG0DIVKB, _alt2gph)
+    obs = SurfaceObservation(0.0, T_C, 101.325, 0.0, temperature_taper_km=H_T)
+    params = compute_anchor(obs, msis, standard_input)
+    P_a0, P_m0 = _anchored_pressure(msis, standard_input, params, 0.0)
+
+    # Dense independent integral with Simpson's rule in geopotential height
+    hs = np.linspace(0.0, 8.0 * H_T, 4001)
+    inp = MSISInput(day=standard_input.day, utsec=standard_input.utsec, alt=0.0,
+                    lat=standard_input.lat, lon=standard_input.lon,
+                    f107a=standard_input.f107a, f107=standard_input.f107,
+                    ap=list(standard_input.ap))
+    T_m = msis.msiscalc_profile(inp, hs).tn
+    T_a = T_m + temperature_offset_at(hs, params)
+    zeta = np.array([_alt2gph(standard_input.lat, x) for x in hs])
+    f = MBARG0DIVKB * (1.0 / T_m - 1.0 / T_a)
+    for k in [len(hs) // 8, len(hs) // 4, len(hs) // 2, len(hs) - 1]:
+        z, y = zeta[:k + 1], f[:k + 1]
+        integral = np.trapezoid(y, z) if hasattr(np, "trapezoid") else np.trapz(y, z)
+        P_a, P_m = _anchored_pressure(msis, standard_input, params, hs[k])
+        lhs = math.log(P_a / P_m) - math.log(P_a0 / P_m0)
+        assert lhs == pytest.approx(integral, abs=1e-5)
+
+    # Warm anomaly: anchored pressure decays more slowly than the model's
+    if T_C + 273.15 > T_m[0]:
+        assert math.log(P_a / P_m) > math.log(P_a0 / P_m0)
+
+
+def test_density_scale_constant_when_no_temp_offset(msis, standard_input):
+    """When dT=0, the hydrostatic correction vanishes and S = S₀ everywhere."""
+    T_model_C = _model_surface_T_C(msis, standard_input)
     obs = SurfaceObservation(altitude_km=0.0, temperature_C=T_model_C,
                              pressure_kPa=101.325, relative_humidity=0.0)
     params = compute_anchor(obs, msis, standard_input)
+    assert params.temperature_offset == pytest.approx(0.0, abs=1e-12)
+    for h in [-0.5, 0.0, 10.0, 30.0, 60.0, 100.0]:
+        assert density_scale_at(h, params) == pytest.approx(params.density_scale, rel=1e-12)
 
-    assert params.hydro_C == pytest.approx(0.0, abs=1e-15)
-    for h in [0.0, 10.0, 30.0, 60.0, 100.0]:
-        assert density_scale_at(h, params) == pytest.approx(params.density_scale, rel=1e-14)
 
-
-def test_density_scale_hydrostatic_asymptote(msis, standard_input, standard_obs):
-    """At very high altitude, S → S₀·exp(C)."""
+def test_density_scale_converges_above_taper(msis, standard_input, standard_obs):
+    """Once the temperature offset has decayed, S stops changing."""
     params = compute_anchor(standard_obs, msis, standard_input)
-    asymptote = params.density_scale * math.exp(params.hydro_C)
-    s_200 = density_scale_at(200.0, params)
-    assert s_200 == pytest.approx(asymptote, rel=1e-10)
+    top = params.h_surface_km + 6.0 * params.H_T
+    s_top = density_scale_at(top, params)
+    for h in [top + 1.0, 60.0, 100.0, 200.0]:
+        assert density_scale_at(h, params) == pytest.approx(s_top, rel=1e-7)
+
+
+def test_density_scale_smooth(msis, standard_input):
+    """Hermite table: d(ln S)/dh is continuous and matches the tabulated slope."""
+    obs = SurfaceObservation(0.0, 35.0, 101.325, 0.5)
+    params = compute_anchor(obs, msis, standard_input)
+    # One-sided slopes on both sides of each node equal the analytic
+    # table derivative, so d(ln S)/dh is continuous across nodes.
+    nodes = params.table_h_km[10:-10:20]
+    idx = np.searchsorted(params.table_h_km, nodes)
+    eps = 1e-6  # truncation error eps*|f''|/2 < 1e-7
+    ln_0 = np.log(density_scale_at(nodes, params))
+    right = (np.log(density_scale_at(nodes + eps, params)) - ln_0) / eps
+    left = (ln_0 - np.log(density_scale_at(nodes - eps, params))) / eps
+    assert np.allclose(right, params.table_dln_scale[idx], rtol=0, atol=1e-7)
+    assert np.allclose(left, params.table_dln_scale[idx], rtol=0, atol=1e-7)
 
 
 def test_temperature_offset_at_surface(msis, standard_input, standard_obs):
@@ -74,9 +155,25 @@ def test_temperature_offset_at_surface(msis, standard_input, standard_obs):
 
 def test_temperature_offset_tapers(msis, standard_input, standard_obs):
     params = compute_anchor(standard_obs, msis, standard_input)
-    dT_30 = temperature_offset_at(30.0, params)
-    expected = params.temperature_offset * math.exp(-30.0 * 30.0 / (2.0 * 15.0 * 15.0))
-    assert dT_30 == pytest.approx(expected, abs=1e-10)
+    assert params.H_T == 2.0  # default taper scale
+    dT_3 = temperature_offset_at(3.0, params)
+    expected = params.temperature_offset * math.exp(-3.0 * 3.0 / (2.0 * 2.0 * 2.0))
+    assert dT_3 == pytest.approx(expected, abs=1e-10)
+
+
+def test_temperature_taper_configurable(msis, standard_input):
+    obs = SurfaceObservation(0.0, 20.0, 101.325, 0.5, temperature_taper_km=5.0)
+    params = compute_anchor(obs, msis, standard_input)
+    assert params.H_T == 5.0
+    assert temperature_offset_at(5.0, params) == pytest.approx(
+        params.temperature_offset * math.exp(-0.5), rel=1e-12)
+
+
+@pytest.mark.parametrize("H_T", [0.0, -1.0])
+def test_temperature_taper_must_be_positive(msis, standard_input, H_T):
+    obs = SurfaceObservation(0.0, 20.0, 101.325, 0.5, temperature_taper_km=H_T)
+    with pytest.raises(ValueError):
+        compute_anchor(obs, msis, standard_input)
 
 
 def test_water_vapor_surface_value(msis, standard_input, standard_obs):
@@ -112,8 +209,6 @@ def test_scale_factor_reasonable(msis, standard_input):
 
 
 # ---- Array input tests ----
-
-import numpy as np
 
 
 def test_density_scale_at_array(msis, standard_input, standard_obs):

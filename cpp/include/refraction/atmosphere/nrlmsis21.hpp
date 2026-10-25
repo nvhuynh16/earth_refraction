@@ -231,6 +231,14 @@ inline double alt2gph(double lat, double alt) {
     return (U - U0) / g0 / 1000.0;
 }
 
+// d(zeta)/dh: derivative of geopotential height w.r.t. geodetic altitude,
+// by central difference of alt2gph (smooth closed form, 1 m step).
+// Multiply a d/d(zeta) gradient such as FullOutput::dT_dz by this to get d/dh.
+inline double dgph_dalt(double lat, double alt) {
+    constexpr double step = 1e-3;  // km
+    return (alt2gph(lat, alt + step) - alt2gph(lat, alt - step)) / (2.0 * step);
+}
+
 inline double dilog(double x0) {
     constexpr double pi2_6 = PI * PI / 6.0;
     double x = x0;
@@ -443,7 +451,7 @@ public:
 
     struct FullOutput {
         Output output;
-        double dT_dz;  // Temperature derivative (K/km)
+        double dT_dz;  // dT/d(zeta), K per geopotential km (not geodetic; see dgph_dalt)
     };
 
     NRLMSIS21();
@@ -1553,11 +1561,13 @@ inline double NRLMSIS21::compute_dT_dz(double zeta, const TnParm& tpro, int iz,
     // dT/dz = -T^2 * df/dz
     // df/dz = Σ_m d[m]*N_{m,3}(z) where d[m] = 3*(cf[m]-cf[m-1])/(t[m+3]-t[m])
     // S3 weights: S3[j] = N_{iz-2+j, 3}(z) for j=0,1,2
+    // cf[-1] = 0 (no basis there), but the m = 0 term is still needed:
+    // N_{0,3} is nonzero on [t0, t3] = [-15, 0] km.
     double dfdz = 0.0;
     for (int j = 0; j < 3; j++) {
         int m = iz - 2 + j;  // Basis function index for order-3 spline
-        if (m >= 1 && m <= NL) {
-            double dcf = tpro.cf[m] - tpro.cf[m - 1];
+        if (m >= 0 && m <= NL) {
+            double dcf = tpro.cf[m] - (m >= 1 ? tpro.cf[m - 1] : 0.0);
             double dnode = NODES_TN[m + 3] - NODES_TN[m];
             if (dnode > 0.0) {
                 dfdz += dcf * 3.0 / dnode * S3[j];

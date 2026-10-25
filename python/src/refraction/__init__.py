@@ -37,6 +37,7 @@ Typical usage::
 from .water_vapor import (
     svp_giacomo, enhancement_factor, water_vapor_mole_fraction,
     water_vapor_number_density, water_vapor_profile,
+    water_vapor_profile_derivative,
 )
 from .ciddor import ciddor_n, n_standard_air, n_water_vapor, compressibility_Z
 from .itu_r_p453 import itu_N, itu_N_from_surface
@@ -48,6 +49,7 @@ from .species import (
 from .surface_anchor import (
     SurfaceObservation, AnchorParams, compute_anchor,
     density_scale_at, temperature_offset_at, anchored_H2O_density,
+    anchored_H2O_gradient,
 )
 from .profile import (
     Mode, AtmosphericConditions, RefractivityResult, VectorRefractivityResult,
@@ -75,6 +77,7 @@ except ImportError:
 __all__ = [
     "svp_giacomo", "enhancement_factor", "water_vapor_mole_fraction",
     "water_vapor_number_density", "water_vapor_profile",
+    "water_vapor_profile_derivative",
     "ciddor_n", "n_standard_air", "n_water_vapor", "compressibility_Z",
     "itu_N", "itu_N_from_surface",
     "K_N2_optical", "K_O2_optical", "K_Ar_optical", "K_He_optical",
@@ -82,6 +85,7 @@ __all__ = [
     "K_H2O_optical", "K_radio_dry", "K_H2O_radio", "K_H2O_radio_dipolar",
     "SurfaceObservation", "AnchorParams", "compute_anchor",
     "density_scale_at", "temperature_offset_at", "anchored_H2O_density",
+    "anchored_H2O_gradient",
     "Mode", "AtmosphericConditions", "RefractivityResult",
     "VectorRefractivityResult", "RefractionProfile",
     "NRLMSIS21", "MSISInput", "MSISOutput", "MSISFullOutput",

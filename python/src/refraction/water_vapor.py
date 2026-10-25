@@ -143,13 +143,36 @@ def water_vapor_number_density(T_K, P_Pa, RH):
     return e / (kB * T_K)
 
 
-def water_vapor_profile(n_H2O_surface, h_km, h_surface_km, H_w=2.0):
-    """
-    Exponential decay profile for water vapor number density vs altitude.
+# Gaussian scale (km) over which the water-vapor gradient tapers to zero
+# below the surface altitude.
+H2O_BELOW_TAPER_KM = 0.3
 
-    Models the rapid decrease of water vapor with altitude using a simple
-    exponential scale height.  Below the surface altitude, the surface
-    value is returned (no extrapolation underground).
+_erf = np.vectorize(math.erf, otypes=[float])
+
+
+def water_vapor_profile(n_H2O_surface, h_km, h_surface_km, H_w=2.0,
+                        L_below=H2O_BELOW_TAPER_KM):
+    """
+    Water vapor number density vs altitude, anchored at the surface.
+
+    Above the surface, a simple exponential with scale height H_w:
+
+        n(h) = n_0 * exp(-dh / H_w),                       dh = h - h_s >= 0
+
+    Below the surface, the exponential's gradient is continued but faded
+    out with a Gaussian of scale L (so humidity stays bounded, unlike a
+    plain exponential extrapolation):
+
+        dn/dh = -(n_0 / H_w) * exp(-dh / H_w - dh^2 / (2 L^2)),    dh < 0
+        n(h)  = n_0 * [1 + (L / H_w) * sqrt(pi/2) * exp(c^2)
+                         * (erf(c) - erf(dh / (L sqrt 2) + c))],
+        c     = L / (H_w * sqrt 2)
+
+    n, dn/dh and d^2n/dh^2 are all continuous at the surface, so the
+    refractive-index gradient used by the ray tracer has no jump there.
+    Far below the surface n levels off at
+    n_0 * [1 + (L / H_w) * sqrt(pi/2) * exp(c^2) * (1 + erf(c))]
+    (1.21 * n_0 for the defaults).
 
     Parameters
     ----------
@@ -162,6 +185,9 @@ def water_vapor_profile(n_H2O_surface, h_km, h_surface_km, H_w=2.0):
     H_w : float, optional
         Water vapor scale height in kilometers.  Default is 2.0 km,
         a typical tropospheric value.
+    L_below : float, optional
+        Gaussian taper scale (km) of the gradient below the surface.
+        Default :data:`H2O_BELOW_TAPER_KM` (0.3 km).
 
     Returns
     -------
@@ -170,5 +196,38 @@ def water_vapor_profile(n_H2O_surface, h_km, h_surface_km, H_w=2.0):
     """
     h_km = np.asarray(h_km, dtype=float)
     dh = h_km - h_surface_km
-    return np.where(dh < 0, n_H2O_surface,
-                    n_H2O_surface * np.exp(-np.maximum(dh, 0.0) / H_w))
+    above = n_H2O_surface * np.exp(-np.maximum(dh, 0.0) / H_w)
+    c = L_below / (H_w * math.sqrt(2.0))
+    amp = (L_below / H_w) * math.sqrt(math.pi / 2.0) * math.exp(c * c)
+    below = n_H2O_surface * (
+        1.0 + amp * (math.erf(c) - _erf(np.minimum(dh, 0.0) / (L_below * math.sqrt(2.0)) + c)))
+    return np.where(dh < 0, below, above)
+
+
+def water_vapor_profile_derivative(n_H2O_surface, h_km, h_surface_km, H_w=2.0,
+                                   L_below=H2O_BELOW_TAPER_KM):
+    """
+    Altitude derivative dn/dh of :func:`water_vapor_profile`.
+
+    Parameters
+    ----------
+    n_H2O_surface : float
+        Water vapor number density at the surface in m^-3.
+    h_km : float or array_like
+        Altitude(s) in kilometers.
+    h_surface_km : float
+        Surface altitude in kilometers.
+    H_w : float, optional
+        Water vapor scale height in kilometers (default 2.0).
+    L_below : float, optional
+        Gaussian taper scale (km) of the gradient below the surface.
+
+    Returns
+    -------
+    numpy.ndarray
+        dn/dh in m^-3 km^-1 at each requested altitude.
+    """
+    h_km = np.asarray(h_km, dtype=float)
+    dh = h_km - h_surface_km
+    taper = np.where(dh < 0, dh * dh / (2.0 * L_below * L_below), 0.0)
+    return -(n_H2O_surface / H_w) * np.exp(-dh / H_w - taper)

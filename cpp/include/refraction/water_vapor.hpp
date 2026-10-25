@@ -38,10 +38,36 @@ inline double water_vapor_number_density(double T_K, double P_Pa, double RH) {
     return e / (kB * T_K);
 }
 
-// Exponential decay profile for water vapor
-inline double water_vapor_profile(double n_H2O_surface, double h_km, double h_surface_km, double H_w = 2.0) {
-    if (h_km < h_surface_km) return n_H2O_surface;
-    return n_H2O_surface * std::exp(-(h_km - h_surface_km) / H_w);
+// Gaussian scale (km) over which the water-vapor gradient tapers to zero
+// below the surface altitude.
+inline constexpr double H2O_BELOW_TAPER_KM = 0.3;
+
+// Water vapor number density vs altitude, anchored at the surface.
+// Above the surface (dh = h - h_s >= 0):  n = n0 · exp(-dh/H_w)
+// Below: the exponential's gradient continues but fades with a Gaussian of
+// scale L, so humidity stays bounded:
+//   dn/dh = -(n0/H_w) · exp(-dh/H_w - dh²/(2L²))
+//   n     = n0 · [1 + (L/H_w)·√(π/2)·e^{c²}·(erf(c) - erf(dh/(L√2) + c))]
+//   c     = L / (H_w·√2)
+// n, dn/dh and d²n/dh² are continuous at the surface; far below, n levels
+// off at 1.21·n0 for the defaults.
+inline double water_vapor_profile(double n_H2O_surface, double h_km, double h_surface_km,
+                                  double H_w = 2.0, double L_below = H2O_BELOW_TAPER_KM) {
+    double dh = h_km - h_surface_km;
+    if (dh >= 0.0) return n_H2O_surface * std::exp(-dh / H_w);
+    double c = L_below / (H_w * std::sqrt(2.0));
+    double amp = (L_below / H_w) * std::sqrt(PI / 2.0) * std::exp(c * c);
+    return n_H2O_surface
+         * (1.0 + amp * (std::erf(c) - std::erf(dh / (L_below * std::sqrt(2.0)) + c)));
+}
+
+// Altitude derivative dn/dh (m^-3 km^-1) of water_vapor_profile
+inline double water_vapor_profile_derivative(double n_H2O_surface, double h_km,
+                                             double h_surface_km, double H_w = 2.0,
+                                             double L_below = H2O_BELOW_TAPER_KM) {
+    double dh = h_km - h_surface_km;
+    double taper = (dh < 0.0) ? dh * dh / (2.0 * L_below * L_below) : 0.0;
+    return -(n_H2O_surface / H_w) * std::exp(-dh / H_w - taper);
 }
 
 }  // namespace refraction

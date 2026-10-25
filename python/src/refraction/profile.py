@@ -31,15 +31,15 @@ from enum import Enum
 
 import numpy as np
 
-from .atmosphere.nrlmsis21 import NRLMSIS21, MSISInput, MSISProfileOutput
+from .atmosphere.nrlmsis21 import NRLMSIS21, MSISInput, MSISProfileOutput, _dgph_dalt
 from . import species
 from . import itu_r_p453 as itu
 from .constants import HPA_TO_PA, REFRACTIVITY_SCALE, kB
 from .surface_anchor import (
     SurfaceObservation, AnchorParams, compute_anchor,
     density_scale_at, temperature_offset_at, anchored_H2O_density,
+    anchored_H2O_gradient,
 )
-from .water_vapor import water_vapor_profile
 
 # Finite difference step for atmospheric density derivatives (km)
 _FD_STEP_KM = 0.01
@@ -173,6 +173,11 @@ class RefractionProfile:
         the NRLMSIS model's own surface prediction is used (no anchoring
         correction).  This gives the raw model output for the given date,
         location, and solar conditions.
+
+        .. note:: The unanchored profile is completely **dry** (no water
+           vapor), because NRLMSIS does not model H2O.  Humidity enters
+           only through ``obs.relative_humidity``, so pass an observation
+           to include it.
 
     Examples
     --------
@@ -387,7 +392,8 @@ class RefractionProfile:
         S = density_scale_at(h_km, self._anchor)
         dT = temperature_offset_at(h_km, self._anchor)
         T_K = out.tn + dT
-        dT_dz = full.dT_dz
+        # NRLMSIS gives dT/d(zeta) (geopotential); convert to dT/dh
+        dT_dz = full.dT_dz * _dgph_dalt(self._base_input.lat, h_km)
 
         # Add the derivative of the Gaussian temperature taper
         dh = h_km - self._anchor.h_surface_km
@@ -432,11 +438,8 @@ class RefractionProfile:
         dn_N_dh = (dp[6] - dm[6]) * inv_2dh
 
         # Water vapor (exponential decay, independent of NRLMSIS)
-        n_H2O = anchored_H2O_density(h_km, self._anchor)
-        if h_km >= self._anchor.h_surface_km:
-            dn_H2O_dh = -n_H2O / self._anchor.H_w
-        else:
-            dn_H2O_dh = 0.0
+        n_H2O = float(anchored_H2O_density(h_km, self._anchor))
+        dn_H2O_dh = float(anchored_H2O_gradient(h_km, self._anchor))
 
         result = RefractivityResult()
         result.h_km = h_km
@@ -500,7 +503,9 @@ class RefractionProfile:
         # Split results
         tn_main = msis_out.tn[:N]
         dn_main = msis_out.dn[:N]
-        dT_dz = msis_out.dT_dz[:N]
+        # NRLMSIS gives dT/d(zeta) (geopotential); convert to dT/dh
+        lat = self._base_input.lat
+        dT_dz = msis_out.dT_dz[:N] * np.array([_dgph_dalt(lat, h) for h in h_km])
         dn_plus = msis_out.dn[N:2*N]
         dn_minus = msis_out.dn[2*N:3*N]
 
@@ -528,10 +533,8 @@ class RefractionProfile:
         dn_N2, dn_O2, dn_O, dn_He, dn_H, dn_Ar, dn_N = [dn_species_dh[:, i] for i in range(7)]
 
         # Water vapor (vectorized exponential decay)
-        n_H2O = water_vapor_profile(self._anchor.n_H2O_surface, h_km,
-                                    self._anchor.h_surface_km, self._anchor.H_w)
-        dn_H2O_dh = np.where(h_km >= self._anchor.h_surface_km,
-                             -n_H2O / self._anchor.H_w, 0.0)
+        n_H2O = anchored_H2O_density(h_km, self._anchor)
+        dn_H2O_dh = anchored_H2O_gradient(h_km, self._anchor)
 
         result = VectorRefractivityResult()
         result.h_km = h_km

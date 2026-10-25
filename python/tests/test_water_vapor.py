@@ -4,7 +4,7 @@ import math
 import pytest
 from refraction.water_vapor import (
     svp_giacomo, enhancement_factor, water_vapor_mole_fraction,
-    water_vapor_profile,
+    water_vapor_profile, water_vapor_profile_derivative,
 )
 
 
@@ -79,10 +79,40 @@ def test_profile_array_input():
         assert n_arr[i] == pytest.approx(n_scalar, rel=1e-14)
 
 
-def test_profile_below_surface():
-    n0 = 1e23
-    n_below = water_vapor_profile(n0, 0.0, 1.0, 2.0)
-    assert float(n_below) == pytest.approx(n0, rel=1e-14)
+def test_profile_below_surface_bounded():
+    """Below the surface the gradient tapers off, so n levels off at a
+    bounded multiple of n0 instead of growing without limit."""
+    n0, H_w, L = 1e23, 2.0, 0.3
+    c = L / (H_w * math.sqrt(2.0))
+    limit = 1.0 + (L / H_w) * math.sqrt(math.pi / 2.0) * math.exp(c * c) * (1.0 + math.erf(c))
+    vals = [float(water_vapor_profile(n0, h, 1.0, H_w)) / n0 for h in (0.9, 0.5, 0.0, -5.0)]
+    assert all(b > a for a, b in zip(vals, vals[1:]))  # increases downward
+    assert vals[-1] == pytest.approx(limit, rel=1e-12)
+    assert limit == pytest.approx(1.2128, abs=1e-4)
+
+
+@pytest.mark.parametrize("h_s", [0.0, 1.0, 3.0])
+def test_profile_smooth_at_surface(h_s):
+    """n, dn/dh and d2n/dh2 are continuous at the surface altitude."""
+    n0, H_w = 1e23, 2.0
+    eps = 1e-9
+    n = lambda h: float(water_vapor_profile(n0, h, h_s, H_w)) / n0
+    d = lambda h: float(water_vapor_profile_derivative(n0, h, h_s, H_w)) / n0
+    assert n(h_s - eps) == pytest.approx(n(h_s + eps), abs=1e-8)
+    assert d(h_s - eps) == pytest.approx(d(h_s + eps), abs=1e-8)
+    assert d(h_s) == pytest.approx(-1.0 / H_w, rel=1e-14)
+    # Curvature n'' = 1/H_w^2 on both sides (one-sided differences, O(step) error)
+    step = 1e-5
+    assert (d(h_s) - d(h_s - step)) / step == pytest.approx(1.0 / H_w**2, rel=1e-3)
+    assert (d(h_s + step) - d(h_s)) / step == pytest.approx(1.0 / H_w**2, rel=1e-3)
+
+
+def test_profile_derivative_matches_fd():
+    n0, h_s = 1e23, 1.0
+    h = np.array([-1.0, 0.2, 0.7, 0.95, 1.05, 3.0, 8.0])
+    e = 1e-5
+    fd = (water_vapor_profile(n0, h + e, h_s) - water_vapor_profile(n0, h - e, h_s)) / (2 * e)
+    assert np.allclose(water_vapor_profile_derivative(n0, h, h_s), fd, rtol=1e-7, atol=1e12)
 
 
 def test_profile_at_surface():

@@ -76,13 +76,18 @@ from refraction import AtmosphericConditions, RefractionProfile, Mode
 
 atm = AtmosphericConditions(day_of_year=172, latitude_deg=45.0)
 
-# Use the model directly (NRLMSIS prediction, no anchoring)
+# Use the model directly (NRLMSIS prediction, no anchoring).
+# NRLMSIS has no water vapor, so this profile is dry air only.
 profile = RefractionProfile(atm)
 
-# Or anchor to surface weather observations for higher accuracy
+# Or anchor to surface weather observations for higher accuracy.
+# The surface temperature offset fades out over temperature_taper_km
+# (Gaussian scale, default 2 km); the pressure offset is carried upward
+# hydrostatically.
 from refraction import SurfaceObservation
 obs = SurfaceObservation(altitude_km=0.0, temperature_C=15.0,
-                         pressure_kPa=101.325, relative_humidity=0.5)
+                         pressure_kPa=101.325, relative_humidity=0.5,
+                         temperature_taper_km=2.0)
 profile = RefractionProfile(atm, obs)
 
 result = profile.compute(10.0, Mode.Ciddor, wavelength_nm=633.0)

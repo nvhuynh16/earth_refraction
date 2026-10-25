@@ -303,3 +303,86 @@ def test_dn_dh_smoothness(standard_profile, mode_wl):
             f"dn/dh jump ratio={ratio:.3f} "
             f"({deriv[i]:.6e} -> {deriv[i+1]:.6e})"
         )
+
+
+# ---- Surface anchoring regression: profile vs direct formulas ----
+
+_SURFACE_CASES = [
+    (15.0, 101.325, 0.0, 0.0),
+    (30.0, 101.325, 0.0, 0.0),
+    (30.0, 101.325, 0.8, 0.0),
+    (0.0, 98.0, 0.5, 0.3),
+    (20.0, 70.0, 0.4, 3.0),
+]
+
+
+@pytest.mark.parametrize("T_C, P_kPa, RH, h", _SURFACE_CASES)
+def test_anchored_surface_matches_direct_formulas(standard_atm, T_C, P_kPa, RH, h):
+    """At the station, the species-sum profile must reproduce the direct
+    Ciddor and ITU-R values computed from the same observation."""
+    from refraction.profile import RefractionProfile
+    from refraction.surface_anchor import SurfaceObservation
+    from refraction import ciddor, itu_r_p453
+    obs = SurfaceObservation(altitude_km=h, temperature_C=T_C,
+                             pressure_kPa=P_kPa, relative_humidity=RH)
+    prof = RefractionProfile(standard_atm, obs)
+    # Ciddor includes compressibility and CO2 terms the species sum omits
+    N_ciddor = (ciddor.ciddor_n(T_C, P_kPa, RH, 633.0) - 1.0) * 1e6
+    assert prof.compute(h, Mode.Ciddor, 633.0).N == pytest.approx(N_ciddor, abs=0.2)
+    N_itu = itu_r_p453.itu_N_from_surface(T_C, P_kPa, RH)
+    assert prof.compute(h, Mode.ITU_R_P453).N == pytest.approx(N_itu, abs=1e-6)
+
+
+def test_anchored_optical_N_depends_on_temperature(standard_atm):
+    """Same pressure, warmer air -> lower optical refractivity (~1 N/K)."""
+    from refraction.profile import RefractionProfile
+    from refraction.surface_anchor import SurfaceObservation
+    N = [RefractionProfile(standard_atm, SurfaceObservation(0.0, T, 101.325, 0.0))
+         .compute(0.0, Mode.Ciddor, 633.0).N for T in (15.0, 30.0)]
+    assert N[0] - N[1] == pytest.approx(276.53 - 262.81, abs=0.2)
+
+
+def test_unanchored_profile_is_dry(standard_atm):
+    """Without an observation the profile has no water vapor."""
+    from refraction.profile import RefractionProfile
+    prof = RefractionProfile(standard_atm)
+    assert prof._anchor.n_H2O_surface == 0.0
+    assert prof._anchor.temperature_offset == pytest.approx(0.0, abs=1e-12)
+    assert prof._anchor.density_scale == pytest.approx(1.0, rel=1e-12)
+
+
+def test_itu_dn_dh_tight_humid(standard_atm):
+    """Radio dN/dh must match a numerical derivative of N closely.
+
+    The dipolar water-vapor term needs dT/dh; NRLMSIS returns dT/d(zeta)
+    (geopotential), which without conversion gives ~1e-5 relative error.
+    """
+    from refraction.profile import RefractionProfile
+    from refraction.surface_anchor import SurfaceObservation
+    prof = RefractionProfile(standard_atm, SurfaceObservation(0.0, 30.0, 101.325, 0.8))
+    dh = 1e-3
+    for alt in [1.0, 2.0, 5.0, 10.0]:
+        r = prof.compute(alt, Mode.ITU_R_P453)
+        fd = (prof.compute(alt + dh, Mode.ITU_R_P453).N
+              - prof.compute(alt - dh, Mode.ITU_R_P453).N) / (2.0 * dh)
+        assert r.dN_dh == pytest.approx(fd, rel=3e-6), f"at {alt} km"
+
+
+@pytest.mark.parametrize("h_s", [0.0, 2.0])
+@pytest.mark.parametrize("mode", [Mode.Ciddor, Mode.ITU_R_P453])
+def test_dn_dh_continuous_at_station(standard_atm, h_s, mode):
+    """Refractivity gradient has no jump at the station altitude (the
+    water-vapor gradient tapers smoothly below the surface)."""
+    from refraction.profile import RefractionProfile
+    from refraction.surface_anchor import SurfaceObservation
+    P = 101.325 if h_s == 0.0 else 80.0
+    prof = RefractionProfile(standard_atm, SurfaceObservation(h_s, 30.0, P, 0.8))
+    below = prof.compute(h_s - 1e-6, mode).dN_dh
+    above = prof.compute(h_s + 1e-6, mode).dN_dh
+    assert below == pytest.approx(above, rel=1e-4)
+    # And the analytic gradient matches the numerical one just below
+    # (1e-4: species densities use a 0.01 km finite difference, and MSIS
+    # curves strongly below sea level)
+    h, e = h_s - 0.2, 1e-3
+    fd = (prof.compute(h + e, mode).N - prof.compute(h - e, mode).N) / (2 * e)
+    assert prof.compute(h, mode).dN_dh == pytest.approx(fd, rel=1e-4)

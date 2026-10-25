@@ -115,6 +115,25 @@ TEST_CASE(runner, dT_dz_finite_difference_crosscheck) {
     }
 }
 
+TEST_CASE(runner, dT_dz_tight_with_gph_jacobian) {
+    // dT/d(zeta) * d(zeta)/dh must equal a finite-difference dT/dh closely,
+    // including below sea level (lowest B-spline basis term, m = 0).
+    NRLMSIS21 msis;
+    auto inp = standard_input();
+    for (double alt : {-3.0, -1.0, -0.2, 0.0, 0.3, 2.0, 10.0, 50.0, 100.0}) {
+        inp.alt = alt;
+        auto full = msis.msiscalc_with_derivative(inp);
+        const double dh = 1e-4;
+        inp.alt = alt + dh;
+        double T_plus = msis.msiscalc(inp).tn;
+        inp.alt = alt - dh;
+        double T_minus = msis.msiscalc(inp).tn;
+        double fd = (T_plus - T_minus) / (2.0 * dh);
+        double analytic = full.dT_dz * refraction::atmosphere::msis21::utils::dgph_dalt(inp.lat, alt);
+        TEST_ASSERT_NEAR(analytic, fd, 1e-4);
+    }
+}
+
 int main() {
     runner.run();
     return print_final_summary();

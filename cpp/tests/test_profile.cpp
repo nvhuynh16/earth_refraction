@@ -128,6 +128,67 @@ TEST_CASE(runner, ciddor_vs_itu_surface) {
     TEST_ASSERT_NEAR_REL(r_opt.N, r_radio.N, 0.30);
 }
 
+TEST_CASE(runner, anchored_surface_matches_direct_formulas) {
+    // At the station, the species-sum profile must reproduce the direct
+    // Ciddor and ITU-R values computed from the same observation.
+    AtmosphericConditions atm;
+    atm.day_of_year = 172;
+    atm.ut_seconds = 29000;
+    atm.latitude_deg = 45.0;
+    atm.longitude_deg = -75.0;
+
+    struct Case { double T_C, P_kPa, RH, h; };
+    for (auto c : {Case{15.0, 101.325, 0.0, 0.0}, Case{30.0, 101.325, 0.0, 0.0},
+                   Case{30.0, 101.325, 0.8, 0.0}, Case{0.0, 98.0, 0.5, 0.3},
+                   Case{20.0, 70.0, 0.4, 3.0}}) {
+        RefractionProfile prof(atm, SurfaceObservation{c.h, c.T_C, c.P_kPa, c.RH});
+        // Ciddor includes compressibility and CO2 terms the species sum omits
+        double N_ciddor = (ciddor::ciddor_n(c.T_C, c.P_kPa, c.RH, 633.0) - 1.0) * 1e6;
+        TEST_ASSERT_NEAR(prof.compute(c.h, Mode::Ciddor, 633.0).N, N_ciddor, 0.2);
+        double N_itu = itu::itu_N_from_surface(c.T_C, c.P_kPa, c.RH);
+        TEST_ASSERT_NEAR(prof.compute(c.h, Mode::ITU_R_P453).N, N_itu, 1e-6);
+    }
+}
+
+TEST_CASE(runner, itu_dn_dh_tight_humid) {
+    // Radio dN/dh must match a numerical derivative of N closely.  The
+    // dipolar water-vapor term needs dT/dh; NRLMSIS returns dT/d(zeta)
+    // (geopotential), which without conversion gives ~1e-5 relative error.
+    AtmosphericConditions atm;
+    atm.day_of_year = 172;
+    atm.ut_seconds = 29000;
+    atm.latitude_deg = 45.0;
+    atm.longitude_deg = -75.0;
+    RefractionProfile prof(atm, SurfaceObservation{0.0, 30.0, 101.325, 0.8});
+    const double dh = 1e-3;
+    for (double alt : {1.0, 2.0, 5.0, 10.0}) {
+        double fd = (prof.compute(alt + dh, Mode::ITU_R_P453).N
+                   - prof.compute(alt - dh, Mode::ITU_R_P453).N) / (2.0 * dh);
+        TEST_ASSERT_NEAR_REL(prof.compute(alt, Mode::ITU_R_P453).dN_dh, fd, 3e-6);
+    }
+}
+
+TEST_CASE(runner, dn_dh_continuous_at_station) {
+    // Refractivity gradient has no jump at the station altitude (the
+    // water-vapor gradient tapers smoothly below the surface)
+    AtmosphericConditions atm;
+    atm.day_of_year = 172;
+    atm.ut_seconds = 29000;
+    atm.latitude_deg = 45.0;
+    atm.longitude_deg = -75.0;
+    for (double h_s : {0.0, 2.0}) {
+        double P = (h_s == 0.0) ? 101.325 : 80.0;
+        RefractionProfile prof(atm, SurfaceObservation{h_s, 30.0, P, 0.8});
+        for (Mode mode : {Mode::Ciddor, Mode::ITU_R_P453}) {
+            TEST_ASSERT_NEAR_REL(prof.compute(h_s - 1e-6, mode).dN_dh,
+                                 prof.compute(h_s + 1e-6, mode).dN_dh, 1e-4);
+            double h = h_s - 0.2, e = 1e-3;
+            double fd = (prof.compute(h + e, mode).N - prof.compute(h - e, mode).N) / (2 * e);
+            TEST_ASSERT_NEAR_REL(prof.compute(h, mode).dN_dh, fd, 1e-4);
+        }
+    }
+}
+
 int main() {
     runner.run();
     return print_final_summary();

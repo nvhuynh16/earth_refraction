@@ -48,6 +48,8 @@ public:
     }
 
     /// Construct without observation (unanchored, raw NRLMSIS prediction).
+    /// The profile is completely dry (no water vapor): NRLMSIS does not
+    /// model H2O, so humidity enters only through a SurfaceObservation.
     explicit RefractionProfile(const AtmosphericConditions& atm)
     {
         init_base_input(atm);
@@ -90,7 +92,8 @@ public:
         double S = density_scale_at(h_km, anchor_);
         double dT = temperature_offset_at(h_km, anchor_);
         double T_K = out.tn + dT;
-        double dT_dz = full.dT_dz;  // K/km from NRLMSIS spline derivative
+        // NRLMSIS gives dT/d(zeta) (geopotential); convert to dT/dh (K/km)
+        double dT_dz = full.dT_dz * atmosphere::msis21::utils::dgph_dalt(base_input_.lat, h_km);
 
         // Add temperature offset derivative (Gaussian taper)
         double dh = h_km - anchor_.h_surface_km;
@@ -130,8 +133,7 @@ public:
 
         // Water vapor from anchored profile
         double n_H2O = anchored_H2O_density(h_km, anchor_);
-        double dn_H2O_dh = (h_km >= anchor_.h_surface_km)
-                          ? -n_H2O / anchor_.H_w : 0.0;
+        double dn_H2O_dh = anchored_H2O_gradient(h_km, anchor_);
 
         RefractivityResult result;
         result.h_km = h_km;

@@ -290,6 +290,34 @@ def _alt2gph(lat: float, alt: float) -> float:
     return (U - U0) / g0 / 1000.0
 
 
+# Step for the numerical derivative of geopotential height (km).
+_GPH_STEP_KM = 1e-3
+
+
+def _dgph_dalt(lat: float, alt: float) -> float:
+    """
+    Derivative of geopotential height with respect to geodetic altitude.
+
+    Central difference of :func:`_alt2gph` (smooth closed form, so the
+    1 m step gives ~1e-12 relative accuracy).  Multiply a d/d(zeta)
+    gradient such as ``MSISFullOutput.dT_dz`` by this to get d/dh.
+
+    Parameters
+    ----------
+    lat : float
+        Geodetic latitude in degrees.
+    alt : float
+        Geodetic altitude in kilometers.
+
+    Returns
+    -------
+    float
+        d(zeta)/dh (dimensionless), ~0.997 at 10 km, ~0.97 at 100 km.
+    """
+    return ((_alt2gph(lat, alt + _GPH_STEP_KM) - _alt2gph(lat, alt - _GPH_STEP_KM))
+            / (2.0 * _GPH_STEP_KM))
+
+
 def _dilog(x0: float) -> float:
     """Spence's dilogarithm Li_2(x) = -integral(ln(1-t)/t, 0, x).
 
@@ -622,7 +650,8 @@ class MSISProfileOutput:
         Number density array, shape (N, 11).  See MSISOutput.dn for
         column indexing.
     dT_dz : numpy.ndarray
-        Temperature gradient array (K/km), shape (N,).
+        Temperature gradient dT/d(zeta) (K per geopotential km), shape (N,).
+        Multiply by :func:`_dgph_dalt` for dT/d(geodetic_alt).
     """
     tn: np.ndarray = field(default_factory=lambda: np.array([]))
     tex: float = 0.0
@@ -1710,11 +1739,14 @@ class NRLMSIS21:
             T = tpro.tex - (tpro.tex - tpro.tb0) * math.exp(-tpro.sigma * (zeta - ZETA_B))
             return tpro.sigma * (tpro.tex - T)
 
+        # d(1/T)/dz = sum_m 3 (cf[m] - cf[m-1]) / (t[m+3] - t[m]) * N_{m,3}(z).
+        # cf[-1] = 0 (no basis there), but the m = 0 term is still needed:
+        # N_{0,3} is nonzero on [t0, t3] = [-15, 0] km.
         dfdz = 0.0
         for j in range(3):
             m = iz - 2 + j
-            if 1 <= m <= NL:
-                dcf = tpro.cf[m] - tpro.cf[m - 1]
+            if 0 <= m <= NL:
+                dcf = tpro.cf[m] - (tpro.cf[m - 1] if m >= 1 else 0.0)
                 dnode = NODES_TN[m + 3] - NODES_TN[m]
                 if dnode > 0.0:
                     dfdz += dcf * 3.0 / dnode * S3[j]

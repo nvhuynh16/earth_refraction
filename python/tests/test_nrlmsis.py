@@ -78,6 +78,23 @@ def test_dT_dz_finite_difference_crosscheck(msis, standard_input):
         )
 
 
+@pytest.mark.parametrize("alt", [-3.0, -1.0, -0.2, 0.0, 0.3, 2.0, 10.0, 50.0, 100.0])
+def test_dT_dz_tight_with_gph_jacobian(msis, standard_input, alt):
+    """dT/d(zeta) * d(zeta)/dh must equal a finite-difference dT/dh closely,
+    including below sea level (lowest B-spline basis term, m = 0)."""
+    from refraction.atmosphere.nrlmsis21 import _dgph_dalt
+    standard_input.alt = alt
+    full = msis.msiscalc_with_derivative(standard_input)
+    dh = 1e-4
+    standard_input.alt = alt + dh
+    T_plus = msis.msiscalc(standard_input).tn
+    standard_input.alt = alt - dh
+    T_minus = msis.msiscalc(standard_input).tn
+    standard_input.alt = alt
+    fd = (T_plus - T_minus) / (2.0 * dh)
+    assert full.dT_dz * _dgph_dalt(standard_input.lat, alt) == pytest.approx(fd, abs=1e-4)
+
+
 # ---- msiscalc_profile tests ----
 
 import numpy as np
