@@ -34,6 +34,13 @@ Typical usage::
     print(result.n, result.N)
 """
 
+from importlib.metadata import PackageNotFoundError, version as _version
+
+try:
+    __version__ = _version("earth-refraction")
+except PackageNotFoundError:  # running from a source tree without installing
+    __version__ = "0+unknown"
+
 from .water_vapor import (
     svp_giacomo, enhancement_factor, water_vapor_mole_fraction,
     water_vapor_number_density, water_vapor_profile,
@@ -75,6 +82,7 @@ except ImportError:
     Tracer = EikonalTracer
 
 __all__ = [
+    "__version__",
     "svp_giacomo", "enhancement_factor", "water_vapor_mole_fraction",
     "water_vapor_number_density", "water_vapor_profile",
     "water_vapor_profile_derivative",
