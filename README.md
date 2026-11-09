@@ -1,6 +1,7 @@
 # Refraction Index
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/nvhuynh16/earth_refraction/actions/workflows/ci.yml/badge.svg)](https://github.com/nvhuynh16/earth_refraction/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/nvhuynh16/earth_refraction/blob/main/LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 
@@ -45,13 +46,18 @@ Decades of research have produced accurate refraction models for the atmosphere 
 ### Python
 
 ```bash
-git clone https://github.com/nhuynh/refraction-index.git
-cd refraction-index
-pip install .
+pip install earth-refraction
 ```
 
-This builds and installs both the pure Python package and the C++ native extension.
-Requires CMake 3.20+, a C++20 compiler, [scikit-build-core](https://github.com/scikit-build/scikit-build-core), and [nanobind](https://github.com/wjakob/nanobind).
+The package is imported as `refraction`. Prebuilt wheels include the C++ native extension.
+
+To build from source (requires CMake 3.20+ and a C++20 compiler; [scikit-build-core](https://github.com/scikit-build/scikit-build-core) and [nanobind](https://github.com/wjakob/nanobind) are fetched automatically):
+
+```bash
+git clone https://github.com/nvhuynh16/earth_refraction.git
+cd earth_refraction
+pip install .
+```
 
 For development (editable install with test dependencies):
 
@@ -123,7 +129,7 @@ result = tracer.trace(inp, stop)
 
 print(f"Arc length: {result.s[-1]:.0f} m")
 print(f"Travel time: {result.T[-1]*1e6:.1f} µs")
-print(f"Bending: {result.bending_deg*60:.2f} arcmin")
+print(f"Bending: {result.bending_deg*60:.2f} arcmin")  # negative: ray exits shallower
 ```
 
 ### Ray tracing — from measured sound velocity profile
@@ -238,11 +244,10 @@ python/
     profile.py                 # Atmospheric profiles
     ocean/                     # Ocean refraction + sound speed
   nanobind/                    # C++ nanobind extension source
-  tests/                       # 698 Python tests
+  tests/                       # 735 Python tests
 
 docs/
-  Ray Trace/                   # LaTeX derivation from Fermat's Principle
-  ocean_model.md               # Ocean model equations and references
+  Ray Trace/                   # Derivation from Fermat's Principle (PDF)
 ```
 
 ## Citation
@@ -254,7 +259,7 @@ If you use this library in your research, please cite:
   author = {Huynh, Nen},
   title = {Refraction Index: Atmospheric and Ocean Refractive Index with 3D Ray Tracing},
   year = {2026},
-  url = {https://github.com/nhuynh/refraction-index},
+  url = {https://github.com/nvhuynh16/earth_refraction},
   license = {MIT},
 }
 ```
@@ -264,7 +269,8 @@ If you use this library in your research, please cite:
 ### Atmospheric
 - Ciddor, P. E. (1996). "Refractive index of air: new equations for the visible and near infrared." *Applied Optics*, 35(9), 1566–1573.
 - ITU-R P.453-14 (2019). "The radio refractive index: its formula and refractivity data."
-- Emmert, J. T., et al. (2021). "NRLMSIS 2.0." *Earth and Space Science*, 8(3).
+- Emmert, J. T., et al. (2021). "NRLMSIS 2.0: A whole-atmosphere empirical model of temperature and neutral species densities." *Earth and Space Science*, 8(3), e2020EA001321.
+- Emmert, J. T., et al. (2022). "NRLMSIS 2.1: An empirical model of nitric oxide incorporated into MSIS." *Journal of Geophysical Research: Space Physics*, 127(10), e2022JA030896.
 
 ### Ocean
 - Meissner, T. & Wentz, F. J. (2004/2012). "The complex dielectric constant of pure and sea water from microwave satellite observations." *IEEE TGRS*.
@@ -280,4 +286,4 @@ If you use this library in your research, please cite:
 
 ## License
 
-[MIT](LICENSE) © 2026 Nen Huynh
+[MIT](https://github.com/nvhuynh16/earth_refraction/blob/main/LICENSE) © 2026 Nen Huynh
