@@ -52,8 +52,6 @@ pip install earth-refraction
 
 The package is imported as `refraction`. Prebuilt wheels include the C++ native extension.
 
-The current release is 0.1.1. Version 0.1.0 is yanked because it lacked the required NRLMSIS 2.1 license notices; do not pin it.
-
 To build from source (requires CMake 3.20+ and a C++20 compiler; [scikit-build-core](https://github.com/scikit-build/scikit-build-core) and [nanobind](https://github.com/wjakob/nanobind) are fetched automatically):
 
 ```bash
