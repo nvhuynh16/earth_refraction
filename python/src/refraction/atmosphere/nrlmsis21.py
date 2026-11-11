@@ -1,3 +1,20 @@
+# This software incorporates the MSIS(R) empirical atmospheric model software
+# designed and provided by NRL. Use is governed by the Open Source Academic
+# Research License Agreement contained in the file nrlmsis2.1_license.txt
+# (licenses/nrlmsis2.1_license.txt in this repository).
+#
+# Change notice (NRL-SOF-014-1 section 4b):
+# - 2026-03-06: translated to Python/NumPy from the C++ translation of the
+#   official NRLMSIS 2.1 Fortran code (msis_*.F90); model formulation and
+#   parameter values unchanged.
+# - 2026-03-06 to 2026-10-24: added msiscalc_with_derivative() and
+#   msiscalc_profile(), which return dT/dzeta from the derivative of the
+#   temperature B-spline (not in the original).
+# - 2026-11-10: surface log mixing ratios (LNVMR) now computed as log() of
+#   the CIPM-2007 mole fractions and the anomalous-O scale height uses
+#   16 g/mol, both as in msis_constants.F90; output now matches the official
+#   test vectors (msis2.1_test_ref_dp.txt).
+
 """
 NRLMSIS 2.1 Atmosphere Model -- Python implementation.
 
@@ -95,20 +112,19 @@ SPECMASS = [
 # Mean molecular mass of air at sea level (kg)
 MBAR = 28.96546 / (1.0e3 * NA)
 
-# ln(volume mixing ratio) at the surface for well-mixed species.
-# These are MSIS-internal fitted values and do not exactly equal
-# ln() of the commonly cited standard mole fractions.
-# Zero entries indicate species whose surface density is computed
-# differently (O, H, N, anomalous O, NO).
+# ln(volume mixing ratio) at the surface for well-mixed species: the natural
+# log of the CIPM-2007 dry-air mole fractions, as in msis_constants.F90
+# (lnvmr = log(...)).  Zero entries are species whose surface density is
+# computed differently (O, H, N, anomalous O, NO).
 LNVMR = [
     0.0, 0.0,
-    -0.247359612336553,   # N2 (~78.1%)
-    -1.563296139553406,   # O2 (~20.9%)
-    0.0,                  # O (not well-mixed)
-    -12.16717628831267,   # He (~5.2 ppm)
-    0.0,                  # H (not well-mixed)
-    -4.674383440483631,   # Ar (~0.93%)
-    0.0, 0.0, 0.0,       # N, anomalous O, NO
+    math.log(0.780848),    # N2
+    math.log(0.209390),    # O2
+    0.0,                   # O (not well-mixed)
+    math.log(0.0000052),   # He
+    0.0,                   # H (not well-mixed)
+    math.log(0.009332),    # Ar
+    0.0, 0.0, 0.0,         # N, anomalous O, NO
 ]
 
 # ln of reference surface pressure parameter: exp(LNP0) ~ 100269 Pa.
@@ -138,7 +154,9 @@ ZETA_A = 85.0
 ZETA_GAMMA = 100.0
 H_GAMMA = 1.0 / 30.0
 
-H_OA = 4000.0 * KB / (SPECMASS[SPEC_OA] * G0) * 1.0e-3
+# Scale height of anomalous O (km).  The Fortran (msis_constants.F90, HOA)
+# uses a mass of exactly 16 g/mol here, not SPECMASS[SPEC_OA] = 15.9994.
+H_OA = 4000.0 * KB / ((16.0 / (1.0e3 * NA)) * G0) * 1.0e-3
 
 IZFMX = 13
 IZFX = 14

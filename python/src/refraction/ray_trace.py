@@ -53,7 +53,7 @@ def speed_from_eta(eta_func, deta_dh_func, c_ref):
     eta_func : callable
         Refractive index as a function of geodetic height (m).
     deta_dh_func : callable
-        Derivative of eta w.r.t. geodetic height (per metre).
+        Derivative of eta w.r.t. geodetic height (per meter).
     c_ref : float
         Reference speed (m/s).  Speed of light for electromagnetic rays.
 
@@ -130,7 +130,7 @@ class EikonalStopCondition:
 class EikonalResult:
     """Result of a 3D eikonal ray trace.
 
-    Organised to match the document structure: core state from the ODE,
+    Organized to match the document structure: core state from the ODE,
     first and second derivatives computed from the state, and application
     quantities computed last.
 

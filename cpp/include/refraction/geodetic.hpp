@@ -6,7 +6,7 @@
 // ellipsoid) and ECEF (Earth-Centered Earth-Fixed) Cartesian coordinates,
 // plus local ENU frame, principal radii, and normal Jacobian.
 //
-// All public functions accept angles in degrees and heights in metres.
+// All public functions accept angles in degrees and heights in meters.
 
 #include <array>
 #include <cmath>

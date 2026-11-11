@@ -5,7 +5,7 @@ ellipsoid) and ECEF (Earth-Centered Earth-Fixed) Cartesian coordinates,
 plus local ENU frame construction, principal radii of curvature, and the
 Jacobian of the geodetic normal for the eikonal ray tracer.
 
-All public functions accept angles in **degrees** and heights in **metres**.
+All public functions accept angles in **degrees** and heights in **meters**.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ def geodetic_to_ecef(lat_deg: float, lon_deg: float, h_m: float) -> np.ndarray:
     Returns
     -------
     numpy.ndarray
-        ECEF position [X, Y, Z] in metres, shape (3,).
+        ECEF position [X, Y, Z] in meters, shape (3,).
     """
     lat = math.radians(lat_deg)
     lon = math.radians(lon_deg)
@@ -63,7 +63,7 @@ def ecef_to_geodetic(
     Parameters
     ----------
     X, Y, Z : float
-        ECEF position in metres.
+        ECEF position in meters.
 
     Returns
     -------
@@ -165,7 +165,7 @@ def principal_radii(lat_deg: float) -> tuple[float, float]:
     -------
     tuple[float, float]
         (M, N_rad) where M is the meridional radius and N_rad is the
-        prime-vertical (transverse) radius, both in metres.
+        prime-vertical (transverse) radius, both in meters.
 
         M = a(1-e²) / (1-e²sin²φ)^(3/2)
         N = a / (1-e²sin²φ)^(1/2)

@@ -1,6 +1,6 @@
 """Tests for the 3D ECEF eikonal ray tracer.
 
-Organised in phases:
+Organized in phases:
 - Phase 1: Basic trace (constant speed, invariants, Bennett)
 - Phase 2: Derivative properties
 - Phase 3: Sensitivity derivatives (analytical + FD validation)
@@ -819,7 +819,7 @@ class TestSensitivityFiniteDifference:
 
         # For angular parameters, delta is in degrees; convert to radians
         if param_name == "h0":
-            delta_physical = delta  # metres
+            delta_physical = delta  # meters
         else:
             delta_physical = math.radians(delta)  # radians
 

@@ -218,7 +218,7 @@ class TestNormalJacobian:
         # FD: perturb ECEF position, recompute normal
         r0 = geodetic_to_ecef(lat, lon, h)
         n0 = geodetic_normal(lat, lon)
-        delta = 1.0  # 1 metre perturbation
+        delta = 1.0  # 1 meter perturbation
 
         J_fd = np.zeros((3, 3))
         for j in range(3):

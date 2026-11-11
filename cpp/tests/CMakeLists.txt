@@ -24,3 +24,7 @@ foreach(test_src ${TEST_SOURCES})
     target_link_libraries(${test_name} PRIVATE refraction)
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
+
+# Official NRLMSIS 2.1 reference output (shared with the Python tests)
+target_compile_definitions(test_nrlmsis PRIVATE
+    MSIS_REFERENCE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/../../python/tests/data/msis2.1_test_ref_dp.txt")

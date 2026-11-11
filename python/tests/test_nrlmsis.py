@@ -1,6 +1,11 @@
 """Tests for NRLMSIS 2.1 model."""
 
+from pathlib import Path
+
+import numpy as np
 import pytest
+
+from refraction.atmosphere.nrlmsis21 import MSISInput
 
 
 def test_sea_level_temperature(msis, standard_input):
@@ -97,7 +102,6 @@ def test_dT_dz_tight_with_gph_jacobian(msis, standard_input, alt):
 
 # ---- msiscalc_profile tests ----
 
-import numpy as np
 
 
 def test_msiscalc_profile_shapes(msis, standard_input):
@@ -144,3 +148,41 @@ def test_msiscalc_boundary_122km(msis, standard_input):
         assert 200.0 < out.tn[i] < 2000.0
         assert out.dn[i, 2] > 0.0  # N2 still present
         assert np.isfinite(out.dT_dz[i])
+
+
+# ---------------------------------------------------------------------------
+# Official NRLMSIS 2.1 test vectors
+# ---------------------------------------------------------------------------
+# data/msis2.1_test_ref_dp.txt is the double-precision reference output
+# distributed with the NRL Fortran code: 200 input sets with densities in
+# cm^-3 (mass density in g/cm^3) and temperature in K, printed to four
+# significant figures (temperature to 0.01 K).
+
+_REF_FILE = Path(__file__).parent / "data" / "msis2.1_test_ref_dp.txt"
+# File column -> (dn index, factor from file units to SI)
+_REF_COLUMNS = [(5, 1e6), (4, 1e6), (2, 1e6), (3, 1e6), (7, 1e6),
+                (1, 1e3), (6, 1e6), (8, 1e6), (9, 1e6), (10, 1e6)]
+
+
+def _reference_rows():
+    with open(_REF_FILE) as f:
+        next(f)
+        return [line.split() for line in f if line.strip()]
+
+
+@pytest.mark.parametrize("row", _reference_rows(), ids=lambda r: f"{r[0]}-{r[2]}km")
+def test_official_reference_vectors(msis, row):
+    """Every value matches the NRL reference to half its last printed digit.
+
+    A relative slack of 1e-6 covers values that land on a rounding tie.
+    """
+    iyd, sec, alt, lat, lon, _stl, f107a, f107, ap = map(float, row[:9])
+    out = msis.msiscalc(MSISInput(day=iyd % 1000, utsec=sec, alt=alt, lat=lat,
+                                  lon=lon, f107a=f107a, f107=f107, ap=[ap] * 7))
+    for (i, factor), tok in zip(_REF_COLUMNS, row[9:19]):
+        ref = float(tok)
+        if ref < 1e-30:            # 9.999E-37 marks "not computed"
+            continue
+        half_digit = 0.5 * 10.0 ** (int(tok.split("E")[1]) - 4)
+        assert abs(out.dn[i] / factor - ref) <= half_digit + 1e-6 * ref, (i, tok)
+    assert abs(out.tn - float(row[19])) <= 0.005 + 1e-6 * float(row[19])

@@ -1,3 +1,13 @@
+# This software incorporates the MSIS(R) empirical atmospheric model software
+# designed and provided by NRL. Use is governed by the Open Source Academic
+# Research License Agreement contained in the file nrlmsis2.1_license.txt
+# (licenses/nrlmsis2.1_license.txt in this repository).
+#
+# Change notice (NRL-SOF-014-1 section 4b): the official NRLMSIS 2.1 parameter
+# file msis21.parm converted to source code; parameter values unmodified, only
+# the storage format changed.
+# Converted 2026-03-06 (from nrlmsis21_parm.hpp).
+
 """NRLMSIS 2.1 parameter data (auto-generated from nrlmsis21_parm.hpp)."""
 import numpy as np
 

@@ -4,11 +4,11 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "earth-refraction"
-version = "0.1.0"
+version = "0.1.1rc1"
 description = "Atmospheric and ocean refractive index computation with 3D ray tracing on WGS-84"
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE"]
+license = "MIT AND LicenseRef-NRL-SOF-014-1"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/nrlmsis2.1_license.txt"]
 authors = [{name = "Nen Huynh"}]
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24", "scipy>=1.10"]

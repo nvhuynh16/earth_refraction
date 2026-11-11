@@ -1,12 +1,24 @@
 #pragma once
 
 // =============================================================================
-// NRLMSIS 2.1 Atmosphere Model - Stripped C++ Implementation
+// NRLMSIS 2.1 Atmosphere Model - C++ Implementation
 // =============================================================================
 //
-// Stripped from ballistic/atmosphere/nrlmsis21_full.hpp for refraction use.
-// Removed: density(), full_output(), Epoch/WeatherConditions dependencies.
-// Added: msiscalc_with_derivative() exposing dT/dz via B-spline derivative.
+// This software incorporates the MSIS(R) empirical atmospheric model software
+// designed and provided by NRL. Use is governed by the Open Source Academic
+// Research License Agreement contained in the file nrlmsis2.1_license.txt
+// (licenses/nrlmsis2.1_license.txt in this repository).
+//
+// Change notice (NRL-SOF-014-1 section 4b):
+// - 2026-01-25: translated to C++ from the official NRLMSIS 2.1 Fortran code
+//   (msis_*.F90); model formulation and parameter values unchanged.
+// - 2026-03-05: trimmed for refraction use (removed outputs not needed here)
+//   and added msiscalc_with_derivative(), which returns dT/dzeta from the
+//   derivative of the temperature B-spline (not in the original).
+// - 2026-11-10: surface log mixing ratios (LNVMR) set to log() of the
+//   CIPM-2007 mole fractions and the anomalous-O scale height uses 16 g/mol,
+//   both as in msis_constants.F90; output now matches the official test
+//   vectors (msis2.1_test_ref_dp.txt).
 //
 // Reference: Emmert, J.T., et al. (2022), NRLMSIS 2.1: An Empirical Model of
 //            Nitric Oxide Incorporated into NRLMSIS 2.0, JGR Space Physics.
@@ -66,14 +78,16 @@ constexpr std::array<double, 11> SPECMASS = {
 
 constexpr double MBAR = 28.96546 / (1.0e3 * NA);
 
+// ln of the CIPM-2007 dry-air mole fractions, as in msis_constants.F90
+// (lnvmr = log(...)); std::log is not constexpr before C++26.
 constexpr std::array<double, 11> LNVMR = {
     0.0, 0.0,
-    -0.247359612336553,
-    -1.563296139553406,
+    -0.24737477036295383,   // N2: ln(0.780848)
+    -1.563556737177912,     // O2: ln(0.209390)
     0.0,
-    -12.16717628831267,
+    -12.166851932376892,    // He: ln(0.0000052)
     0.0,
-    -4.674383440483631,
+    -4.674305924822954,     // Ar: ln(0.009332)
     0.0, 0.0, 0.0
 };
 
@@ -93,7 +107,9 @@ constexpr double ZETA_A = 85.0;
 constexpr double ZETA_GAMMA = 100.0;
 constexpr double H_GAMMA = 1.0 / 30.0;
 
-constexpr double H_OA = 4000.0 * KB / (SPECMASS[SPEC_OA] * G0) * 1.0e-3;
+// Scale height of anomalous O (km).  The Fortran (msis_constants.F90, HOA)
+// uses a mass of exactly 16 g/mol here, not SPECMASS[SPEC_OA] = 15.9994.
+constexpr double H_OA = 4000.0 * KB / ((16.0 / (1.0e3 * NA)) * G0) * 1.0e-3;
 
 constexpr int IZFMX = 13;
 constexpr int IZFX = 14;

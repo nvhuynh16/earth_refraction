@@ -1,7 +1,7 @@
 # Refraction Index
 
 [![CI](https://github.com/nvhuynh16/earth_refraction/actions/workflows/ci.yml/badge.svg)](https://github.com/nvhuynh16/earth_refraction/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/nvhuynh16/earth_refraction/blob/main/LICENSE)
+[![License: MIT + NRL non-commercial](https://img.shields.io/badge/License-MIT%20%2B%20NRL%20non--commercial-blue.svg)](#license)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 
@@ -13,7 +13,7 @@ Decades of research have produced accurate refraction models for the atmosphere 
 
 **Atmospheric refraction** (surface to 122 km)
 - Optical mode (Ciddor 1996, 300–1700 nm) and radio mode (ITU-R P.453-14)
-- Species-sum approach: n − 1 = Σ nᵢ × Kᵢ(λ) using NRLMSIS 2.1
+- Species-sum approach: n − 1 = Σ nᵢ × Kᵢ(λ) using NRLMSIS 2.1 (non-commercial license, see [License](#license))
 - Surface anchoring to weather observations via temperature offset and density scaling
 
 **Ocean refraction** (surface to 11 km depth)
@@ -244,7 +244,7 @@ python/
     profile.py                 # Atmospheric profiles
     ocean/                     # Ocean refraction + sound speed
   nanobind/                    # C++ nanobind extension source
-  tests/                       # 736 Python tests
+  tests/                       # 936 Python tests
 
 docs/
   Ray Trace/                   # Derivation from Fermat's Principle (PDF)
@@ -260,7 +260,7 @@ If you use this library in your research, please cite:
   title = {Refraction Index: Atmospheric and Ocean Refractive Index with 3D Ray Tracing},
   year = {2026},
   url = {https://github.com/nvhuynh16/earth_refraction},
-  license = {MIT},
+  license = {MIT; NRLMSIS 2.1 component under NRL-SOF-014-1},
 }
 ```
 
@@ -286,4 +286,8 @@ If you use this library in your research, please cite:
 
 ## License
 
-[MIT](https://github.com/nvhuynh16/earth_refraction/blob/main/LICENSE) © 2026 Nen Huynh
+The library code is released under the [MIT license](https://github.com/nvhuynh16/earth_refraction/blob/main/LICENSE) © 2026 Nen Huynh, **except** the NRLMSIS 2.1 atmosphere model.
+
+This software incorporates the MSIS® empirical atmospheric model software designed and provided by NRL. Use is governed by the Open Source Academic Research License Agreement contained in the file [nrlmsis2.1_license.txt](https://github.com/nvhuynh16/earth_refraction/blob/main/licenses/nrlmsis2.1_license.txt).
+
+That agreement (NRL-SOF-014-1) authorizes use **solely for research, academic and non-profit purposes; commercial use is prohibited**. It applies to everything that uses the atmosphere model: `RefractionProfile`, `from_profile` tracers, and `refraction.atmosphere`. The ocean models, the ray tracer with your own speed profile or table, the geodetic utilities, and the direct Ciddor / ITU-R formulas do not use NRLMSIS. See [THIRD_PARTY_NOTICES.md](https://github.com/nvhuynh16/earth_refraction/blob/main/THIRD_PARTY_NOTICES.md) for details.

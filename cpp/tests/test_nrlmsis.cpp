@@ -2,6 +2,11 @@
 #include "test_fixtures.hpp"
 #include <refraction/atmosphere/nrlmsis21.hpp>
 
+#include <cmath>
+#include <fstream>
+#include <sstream>
+#include <string>
+
 using namespace refraction::test;
 using namespace refraction::atmosphere;
 
@@ -132,6 +137,45 @@ TEST_CASE(runner, dT_dz_tight_with_gph_jacobian) {
         double analytic = full.dT_dz * refraction::atmosphere::msis21::utils::dgph_dalt(inp.lat, alt);
         TEST_ASSERT_NEAR(analytic, fd, 1e-4);
     }
+}
+
+// Official NRLMSIS 2.1 test vectors: msis2.1_test_ref_dp.txt is the
+// double-precision reference output distributed with the NRL Fortran code
+// (200 input sets; densities in cm^-3, mass density in g/cm^3, printed to
+// four significant figures; temperature in K to 0.01 K).  Every value must
+// match to half its last printed digit, plus 1e-6 relative for rounding ties.
+TEST_CASE(runner, official_reference_vectors) {
+    NRLMSIS21 msis;
+    std::ifstream file(MSIS_REFERENCE_FILE);
+    TEST_ASSERT_MSG(file.is_open(), "cannot open " MSIS_REFERENCE_FILE);
+    std::string line;
+    std::getline(file, line);  // header
+    const int idx[10] = {5, 4, 2, 3, 7, 1, 6, 8, 9, 10};
+    const double to_si[10] = {1e6, 1e6, 1e6, 1e6, 1e6, 1e3, 1e6, 1e6, 1e6, 1e6};
+    int rows = 0;
+    while (std::getline(file, line)) {
+        std::istringstream in(line);
+        double iyd, sec, alt, lat, lon, stl, f107a, f107, ap, T;
+        if (!(in >> iyd >> sec >> alt >> lat >> lon >> stl >> f107a >> f107 >> ap)) continue;
+        std::string tok[10];
+        for (auto& t : tok) in >> t;
+        in >> T;
+        auto out = msis.msiscalc({std::fmod(iyd, 1000.0), sec, alt, lat, lon, f107a, f107,
+                                  {ap, ap, ap, ap, ap, ap, ap}});
+        for (int k = 0; k < 10; ++k) {
+            double ref = std::stod(tok[k]);
+            if (ref < 1e-30) continue;  // 9.999E-37 marks "not computed"
+            int exponent = std::stoi(tok[k].substr(tok[k].find('E') + 1));
+            double half_digit = 0.5 * std::pow(10.0, exponent - 4);
+            TEST_ASSERT_MSG(std::abs(out.dn[idx[k]] / to_si[k] - ref) <= half_digit + 1e-6 * ref,
+                            "row " << rows << " column " << k << ": " << out.dn[idx[k]] / to_si[k]
+                                   << " vs " << tok[k]);
+        }
+        TEST_ASSERT_MSG(std::abs(out.tn - T) <= 0.005 + 1e-6 * T,
+                        "row " << rows << " T: " << out.tn << " vs " << T);
+        ++rows;
+    }
+    TEST_ASSERT_EQ(rows, 200);
 }
 
 int main() {
