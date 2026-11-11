@@ -1,6 +1,7 @@
 # Refraction Index
 
 [![CI](https://github.com/nvhuynh16/earth_refraction/actions/workflows/ci.yml/badge.svg)](https://github.com/nvhuynh16/earth_refraction/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/earth-refraction.svg)](https://pypi.org/project/earth-refraction/)
 [![License: MIT + NRL non-commercial](https://img.shields.io/badge/License-MIT%20%2B%20NRL%20non--commercial-blue.svg)](#license)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
@@ -50,6 +51,8 @@ pip install earth-refraction
 ```
 
 The package is imported as `refraction`. Prebuilt wheels include the C++ native extension.
+
+The current release is 0.1.1. Version 0.1.0 is yanked because it lacked the required NRLMSIS 2.1 license notices; do not pin it.
 
 To build from source (requires CMake 3.20+ and a C++20 compiler; [scikit-build-core](https://github.com/scikit-build/scikit-build-core) and [nanobind](https://github.com/wjakob/nanobind) are fetched automatically):
 
